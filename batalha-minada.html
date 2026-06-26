@@ -119,7 +119,7 @@
   <div class="regras">
     <h3>Como jogar</h3>
     <ul>
-      <li>💧 <b>Água:</b> aparece uma pista com quantas minas e navios estão nas 8 casas vizinhas. Sua vez "passa" (mas como é individual, é só informação).</li>
+      <li>💧 <b>Água:</b> a casa abre e mostra a pista (minas e navios vizinhos). Se ela tiver <b>0 minas por perto</b>, abre a área segura em volta sozinha (efeito dominó, igual ao Campo Minado).</li>
       <li>🚢 <b>Navio:</b> você acerta e <b>joga de novo</b> (combo!). Destrua todos pra vencer.</li>
       <li>💣 <b>Mina:</b> você perde 1 vida e o combo acaba. Zerou as vidas, perdeu.</li>
       <li>A pista mostra: <span style="color:#ff6b6b">💣 minas perto</span> e <span style="color:#7CFC00">🚢 navios perto</span>. Use pra deduzir onde atacar e o que evitar!</li>
@@ -132,7 +132,7 @@
   // ========================================================
   const TAMANHO = 8;              // tabuleiro 8x8
   const TAMANHOS_NAVIOS = [4, 3, 3, 2]; // navios: um de 4, dois de 3, um de 2
-  const QTD_MINAS = 12;           // quantas minas espalhar (mais minas = mais difícil)
+  const QTD_MINAS = 8;            // quantas minas espalhar (equilíbrio)
   const VIDAS_INICIAIS = 3;
 
   // ========================================================
@@ -251,10 +251,10 @@
     if (jogoAcabou) return;
     if (revelada[linha][coluna]) return; // já clicou aqui antes
 
-    revelada[linha][coluna] = true;
     const conteudo = grade[linha][coluna];
 
     if (conteudo === 'navio') {
+      revelada[linha][coluna] = true;
       partesNavioRestantes--;
       mostrarMensagem('🚢 Acertou um navio! Combo: jogue de novo!');
       if (partesNavioRestantes === 0) {
@@ -263,6 +263,7 @@
       }
     }
     else if (conteudo === 'mina') {
+      revelada[linha][coluna] = true;
       vidas--;
       mostrarMensagem('💣 BOOM! Você pisou numa mina e perdeu 1 vida.');
       if (vidas <= 0) {
@@ -270,13 +271,47 @@
         jogoAcabou = true;
       }
     }
-    else { // água
-      const { minas, navios } = contarVizinhos(linha, coluna);
-      mostrarMensagem(`💧 Água. Por perto: ${minas} mina(s) e ${navios} navio(s).`);
+    else { // água -> abre em cascata, igual ao Campo Minado
+      abrirCascata(linha, coluna);
+      mostrarMensagem('💧 Água! A área segura em volta abriu. Leia as pistas!');
     }
 
     atualizarPainel();
     desenharTabuleiro();
+  }
+
+  // ========================================================
+  //  ABERTURA EM CASCATA (o "efeito dominó" do Campo Minado)
+  //  Se uma casa de água não tem NENHUMA mina por perto,
+  //  é seguro abrir os vizinhos automaticamente. E se um
+  //  vizinho também tiver 0 minas, ele continua abrindo...
+  // ========================================================
+  function abrirCascata(linha, coluna) {
+    // só abre casa de água que ainda não foi revelada
+    if (revelada[linha][coluna]) return;
+    if (grade[linha][coluna] !== 'agua') return;
+
+    revelada[linha][coluna] = true;
+
+    const { minas } = contarVizinhos(linha, coluna);
+
+    // se tem mina por perto, paramos aqui (não é seguro abrir vizinhos)
+    if (minas > 0) return;
+
+    // 0 minas por perto = vizinhos são seguros, abre todos eles
+    for (let dl = -1; dl <= 1; dl++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dl === 0 && dc === 0) continue;
+        const l = linha + dl;
+        const c = coluna + dc;
+        if (l >= 0 && l < TAMANHO && c >= 0 && c < TAMANHO) {
+          // só continua a cascata pela água (navios não abrem sozinhos)
+          if (grade[l][c] === 'agua' && !revelada[l][c]) {
+            abrirCascata(l, c);
+          }
+        }
+      }
+    }
   }
 
   // ========================================================
