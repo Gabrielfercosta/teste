@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Batalha Minada</title>
+<style>
+  /* ===== Estilo bem simples só pra ficar jogável ===== */
+  body {
+    font-family: Arial, sans-serif;
+    background: #0b1d2a;
+    color: #e8f1f7;
+    text-align: center;
+    margin: 0;
+    padding: 20px;
+  }
+  h1 { margin: 0 0 4px; }
+  .subtitulo { color: #8fb3c9; margin-bottom: 16px; }
+
+  /* Barra de informações (vidas, navios restantes, mensagem) */
+  .painel {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 16px;
+    font-size: 18px;
+  }
+  .mensagem {
+    min-height: 24px;
+    margin-bottom: 16px;
+    font-size: 18px;
+    font-weight: bold;
+    color: #ffd166;
+  }
+
+  /* O tabuleiro é uma grade de 8x8 */
+  #tabuleiro {
+    display: grid;
+    grid-template-columns: repeat(8, 48px);
+    grid-template-rows: repeat(8, 48px);
+    gap: 4px;
+    justify-content: center;
+    margin: 0 auto 20px;
+  }
+
+  /* Cada casa do tabuleiro */
+  .casa {
+    width: 48px;
+    height: 48px;
+    background: #1c4d6e;
+    border: none;
+    border-radius: 6px;
+    font-size: 22px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    transition: background 0.15s;
+  }
+  .casa:hover:not(:disabled) { background: #2a6b96; }
+  .casa:disabled { cursor: default; }
+
+  /* Cores pra cada resultado */
+  .agua   { background: #15394f; }      /* tiro na água */
+  .navio  { background: #2e8b57; }      /* acertou navio */
+  .mina   { background: #c0392b; }      /* explodiu numa mina */
+
+  /* A pista (números) fica pequena dentro da casa de água */
+  .pista {
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: bold;
+  }
+  .pista .mina-cor  { color: #ff6b6b; }
+  .pista .navio-cor { color: #7CFC00; }
+
+  button.reiniciar {
+    background: #ffd166;
+    color: #0b1d2a;
+    border: none;
+    padding: 10px 20px;
+    font-size: 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: bold;
+  }
+
+  .regras {
+    max-width: 520px;
+    margin: 24px auto 0;
+    text-align: left;
+    background: #112e40;
+    padding: 16px 20px;
+    border-radius: 10px;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #cfe2ee;
+  }
+  .regras h3 { margin-top: 0; color: #ffd166; }
+</style>
+</head>
+<body>
+
+  <h1>Batalha Minada</h1>
+  <p class="subtitulo">Batalha Naval + Campo Minado</p>
+
+  <div class="painel">
+    <div>Vidas: <span id="vidas">3</span> ❤️</div>
+    <div>Navios restantes: <span id="naviosRestantes">0</span> 🚢</div>
+  </div>
+
+  <div class="mensagem" id="mensagem">Clique numa casa pra atacar!</div>
+
+  <div id="tabuleiro"></div>
+
+  <button class="reiniciar" onclick="iniciarJogo()">Reiniciar jogo</button>
+
+  <div class="regras">
+    <h3>Como jogar</h3>
+    <ul>
+      <li>💧 <b>Água:</b> aparece uma pista com quantas minas e navios estão nas 8 casas vizinhas. Sua vez "passa" (mas como é individual, é só informação).</li>
+      <li>🚢 <b>Navio:</b> você acerta e <b>joga de novo</b> (combo!). Destrua todos pra vencer.</li>
+      <li>💣 <b>Mina:</b> você perde 1 vida e o combo acaba. Zerou as vidas, perdeu.</li>
+      <li>A pista mostra: <span style="color:#ff6b6b">💣 minas perto</span> e <span style="color:#7CFC00">🚢 navios perto</span>. Use pra deduzir onde atacar e o que evitar!</li>
+    </ul>
+  </div>
+
+<script>
+  // ========================================================
+  //  CONFIGURAÇÕES DO JOGO
+  // ========================================================
+  const TAMANHO = 8;              // tabuleiro 8x8
+  const TAMANHOS_NAVIOS = [4, 3, 3, 2]; // navios: um de 4, dois de 3, um de 2
+  const QTD_MINAS = 6;            // quantas minas espalhar
+  const VIDAS_INICIAIS = 3;
+
+  // ========================================================
+  //  ESTADO DO JOGO (as variáveis que mudam durante a partida)
+  // ========================================================
+  let grade;          // matriz que guarda o que tem em cada casa: 'agua', 'navio' ou 'mina'
+  let revelada;       // matriz que diz se a casa já foi clicada
+  let vidas;
+  let partesNavioRestantes;
+  let jogoAcabou;
+
+  // ========================================================
+  //  COMEÇAR / REINICIAR O JOGO
+  // ========================================================
+  function iniciarJogo() {
+    vidas = VIDAS_INICIAIS;
+    jogoAcabou = false;
+
+    // 1) Cria o tabuleiro todo cheio de água
+    grade = [];
+    revelada = [];
+    for (let l = 0; l < TAMANHO; l++) {
+      grade.push(new Array(TAMANHO).fill('agua'));
+      revelada.push(new Array(TAMANHO).fill(false));
+    }
+
+    // 2) Espalha os navios e as minas de forma aleatória
+    colocarNavios();
+    colocarMinas();
+
+    // 3) Conta quantas partes de navio existem no total
+    partesNavioRestantes = TAMANHOS_NAVIOS.reduce((soma, n) => soma + n, 0);
+
+    // 4) Atualiza a tela
+    atualizarPainel();
+    mostrarMensagem('Clique numa casa pra atacar!');
+    desenharTabuleiro();
+  }
+
+  // ========================================================
+  //  COLOCAR OS NAVIOS (sorteia posição e direção)
+  // ========================================================
+  function colocarNavios() {
+    for (const tamanho of TAMANHOS_NAVIOS) {
+      let colocado = false;
+      // fica tentando até achar um lugar que caiba e não tenha outro navio
+      while (!colocado) {
+        const horizontal = Math.random() < 0.5;
+        const linha = Math.floor(Math.random() * TAMANHO);
+        const coluna = Math.floor(Math.random() * TAMANHO);
+
+        if (cabeNavio(linha, coluna, tamanho, horizontal)) {
+          for (let i = 0; i < tamanho; i++) {
+            const l = horizontal ? linha : linha + i;
+            const c = horizontal ? coluna + i : coluna;
+            grade[l][c] = 'navio';
+          }
+          colocado = true;
+        }
+      }
+    }
+  }
+
+  // Verifica se um navio cabe naquela posição sem sair do tabuleiro nem encostar em outro
+  function cabeNavio(linha, coluna, tamanho, horizontal) {
+    for (let i = 0; i < tamanho; i++) {
+      const l = horizontal ? linha : linha + i;
+      const c = horizontal ? coluna + i : coluna;
+      if (l >= TAMANHO || c >= TAMANHO) return false; // saiu do tabuleiro
+      if (grade[l][c] !== 'agua') return false;        // já tem algo ali
+    }
+    return true;
+  }
+
+  // ========================================================
+  //  COLOCAR AS MINAS (em casas vazias)
+  // ========================================================
+  function colocarMinas() {
+    let colocadas = 0;
+    while (colocadas < QTD_MINAS) {
+      const linha = Math.floor(Math.random() * TAMANHO);
+      const coluna = Math.floor(Math.random() * TAMANHO);
+      if (grade[linha][coluna] === 'agua') {
+        grade[linha][coluna] = 'mina';
+        colocadas++;
+      }
+    }
+  }
+
+  // ========================================================
+  //  A PISTA: contar minas e navios nas 8 casas vizinhas
+  // ========================================================
+  function contarVizinhos(linha, coluna) {
+    let minas = 0;
+    let navios = 0;
+    // olha as 8 casas em volta (linha-1 até linha+1, coluna-1 até coluna+1)
+    for (let dl = -1; dl <= 1; dl++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        if (dl === 0 && dc === 0) continue; // pula a própria casa
+        const l = linha + dl;
+        const c = coluna + dc;
+        // só conta se estiver dentro do tabuleiro
+        if (l >= 0 && l < TAMANHO && c >= 0 && c < TAMANHO) {
+          if (grade[l][c] === 'mina')  minas++;
+          if (grade[l][c] === 'navio') navios++;
+        }
+      }
+    }
+    return { minas, navios };
+  }
+
+  // ========================================================
+  //  O QUE ACONTECE QUANDO O JOGADOR CLICA NUMA CASA
+  // ========================================================
+  function atacar(linha, coluna) {
+    if (jogoAcabou) return;
+    if (revelada[linha][coluna]) return; // já clicou aqui antes
+
+    revelada[linha][coluna] = true;
+    const conteudo = grade[linha][coluna];
+
+    if (conteudo === 'navio') {
+      partesNavioRestantes--;
+      mostrarMensagem('🚢 Acertou um navio! Combo: jogue de novo!');
+      if (partesNavioRestantes === 0) {
+        mostrarMensagem('🏆 Você afundou todos os navios! VITÓRIA!');
+        jogoAcabou = true;
+      }
+    }
+    else if (conteudo === 'mina') {
+      vidas--;
+      mostrarMensagem('💣 BOOM! Você pisou numa mina e perdeu 1 vida.');
+      if (vidas <= 0) {
+        mostrarMensagem('☠️ Suas vidas acabaram. DERROTA!');
+        jogoAcabou = true;
+      }
+    }
+    else { // água
+      const { minas, navios } = contarVizinhos(linha, coluna);
+      mostrarMensagem(`💧 Água. Por perto: ${minas} mina(s) e ${navios} navio(s).`);
+    }
+
+    atualizarPainel();
+    desenharTabuleiro();
+  }
+
+  // ========================================================
+  //  DESENHAR O TABULEIRO NA TELA
+  // ========================================================
+  function desenharTabuleiro() {
+    const div = document.getElementById('tabuleiro');
+    div.innerHTML = ''; // limpa antes de redesenhar
+
+    for (let l = 0; l < TAMANHO; l++) {
+      for (let c = 0; c < TAMANHO; c++) {
+        const botao = document.createElement('button');
+        botao.className = 'casa';
+
+        if (!revelada[l][c]) {
+          // casa ainda fechada
+          botao.onclick = () => atacar(l, c);
+          if (jogoAcabou) botao.disabled = true;
+        } else {
+          // casa já revelada: mostra o resultado
+          botao.disabled = true;
+          const conteudo = grade[l][c];
+
+          if (conteudo === 'navio') {
+            botao.classList.add('navio');
+            botao.textContent = '🚢';
+          } else if (conteudo === 'mina') {
+            botao.classList.add('mina');
+            botao.textContent = '💥';
+          } else {
+            // água: mostra a pista (minas e navios vizinhos)
+            botao.classList.add('agua');
+            const { minas, navios } = contarVizinhos(l, c);
+            botao.innerHTML =
+              `<span class="pista">` +
+              `<span class="mina-cor">💣${minas}</span><br>` +
+              `<span class="navio-cor">🚢${navios}</span>` +
+              `</span>`;
+          }
+        }
+        div.appendChild(botao);
+      }
+    }
+  }
+
+  // ========================================================
+  //  FUNÇÕES AUXILIARES DE TELA
+  // ========================================================
+  function atualizarPainel() {
+    document.getElementById('vidas').textContent = vidas;
+    document.getElementById('naviosRestantes').textContent = partesNavioRestantes;
+  }
+
+  function mostrarMensagem(texto) {
+    document.getElementById('mensagem').textContent = texto;
+  }
+
+  // Começa o jogo assim que a página carrega
+  iniciarJogo();
+</script>
+</body>
+</html>
