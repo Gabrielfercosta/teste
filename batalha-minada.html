@@ -142,9 +142,9 @@
     <ul>
       <li><b>1) Monte seus navios:</b> clique pra posicionar cada navio. Use o botão <i>Girar</i> pra mudar a direção.</li>
       <li><b>2) Monte suas minas:</b> clique em casas de água pra esconder suas armadilhas.</li>
-      <li><b>3) Batalha:</b> ataque o tabuleiro do robô.</li>
-      <li>🚢 <b>Navio:</b> acertou, <b>joga de novo</b> (combo).</li>
-      <li>💧 <b>Água:</b> mostra a pista (minas/navios vizinhos), abre a área segura em cascata e <b>passa a vez</b>.</li>
+      <li><b>3) Batalha:</b> cada turno você tem <b>3 tiros</b>. Ataque o tabuleiro do robô.</li>
+      <li>🚢 <b>Navio:</b> acertou! O tiro <b>não conta</b> (combo) — continue atacando.</li>
+      <li>💧 <b>Água:</b> mostra a pista (minas/navios vizinhos) e abre a área segura em cascata. Gasta 1 tiro; quando acabam, passa a vez.</li>
       <li>💣 <b>Mina:</b> quem pisar <b>perde na hora</b>! Por isso, posicione bem as suas pra pegar o robô.</li>
     </ul>
   </div>
@@ -156,6 +156,7 @@
   const TAMANHO = 8;
   const TAMANHOS_NAVIOS = [4, 3, 3, 2];   // navios de cada jogador
   const QTD_MINAS = 8;                    // minas de cada jogador
+  const TIROS_POR_TURNO = 3;              // quantos tiros cada lado tem por turno
   const TOTAL_PARTES = TAMANHOS_NAVIOS.reduce((s, n) => s + n, 0); // = 12
 
   // ========================================================
@@ -172,6 +173,7 @@
   let orientacao;        // 'horizontal' | 'vertical'
   let minasParaColocar;  // quantas minas faltam o jogador posicionar
   let primeiroAtaque;    // { jogador, robo } -> garante 1º tiro sem morrer na mina
+  let tirosRestantes;    // quantos tiros sobram no turno atual
 
   // ========================================================
   //  FERRAMENTAS DE TABULEIRO
@@ -333,7 +335,8 @@
   function comecarBatalha() {
     fase = 'batalha';
     vez = 'jogador';
-    mostrarMensagem('⚔️ Batalha começou! Ataque o tabuleiro do robô.');
+    tirosRestantes = TIROS_POR_TURNO; // começa o turno com os tiros cheios
+    mostrarMensagem('⚔️ Batalha começou! Você tem ' + TIROS_POR_TURNO + ' tiros por turno.');
   }
 
   // ========================================================
@@ -393,20 +396,27 @@
     if (robo.revelada[l][c]) return; // já atacou aqui
 
     const res = resolverAtaque('jogador', l, c);
+    tirosRestantes--; // todo ataque gasta um tiro
 
     if (res === 'mina') {
       mostrarMensagem('💣 Você pisou numa mina do robô! DERROTA. ☠️');
       fase = 'fim';
     } else if (res === 'navio') {
+      tirosRestantes++; // COMBO: acertar navio devolve o tiro
       if (partesRobo === 0) {
         mostrarMensagem('🏆 Você afundou todos os navios do robô! VITÓRIA!');
         fase = 'fim';
       } else {
-        mostrarMensagem('🚢 Acertou um navio! Combo: ataque de novo!');
+        mostrarMensagem('🚢 Acertou um navio! Combo: o tiro não conta. Continue!');
       }
     } else { // água
-      mostrarMensagem('💧 Água. Passou a vez pro robô...');
+      mostrarMensagem('💧 Água. Tiros restantes neste turno: ' + tirosRestantes);
+    }
+
+    // acabaram os tiros? passa a vez pro robô
+    if (fase === 'batalha' && tirosRestantes <= 0) {
       vez = 'robo';
+      tirosRestantes = TIROS_POR_TURNO; // prepara o turno do robô
     }
 
     atualizarContadores();
@@ -423,27 +433,35 @@
 
     const alvo = escolherAlvoRobo();
     const res = resolverAtaque('robo', alvo.l, alvo.c);
+    tirosRestantes--; // o robô também gasta um tiro
 
     if (res === 'mina') {
-      // MODO TESTE: o robô tem vidas infinitas, então não morre na mina.
+      // MODO TESTE: o robô tem vidas infinitas, então não morre. A mina
+      // apenas "tropeça" ele e encerra o turno dele.
       mostrarMensagem('🤖💣 O robô pisou numa mina sua! (vidas infinitas no modo teste) Sua vez!');
-      vez = 'jogador';
+      tirosRestantes = 0; // acaba o turno do robô
     } else if (res === 'navio') {
+      tirosRestantes++; // COMBO: navio devolve o tiro
       if (partesJogador === 0) {
         mostrarMensagem('☠️ O robô afundou todos os seus navios. DERROTA.');
         fase = 'fim';
       } else {
-        mostrarMensagem('🤖 O robô acertou um navio seu e joga de novo...');
+        mostrarMensagem('🤖 O robô acertou um navio seu e continua atacando...');
       }
     } else { // água
-      mostrarMensagem('🤖 O robô errou (água). Sua vez!');
+      mostrarMensagem('🤖 O robô errou (água). Tiros dele neste turno: ' + tirosRestantes);
+    }
+
+    // acabaram os tiros do robô? volta pra sua vez
+    if (fase === 'batalha' && tirosRestantes <= 0) {
       vez = 'jogador';
+      tirosRestantes = TIROS_POR_TURNO;
     }
 
     atualizarContadores();
     desenharTudo();
 
-    // se o robô acertou navio e o jogo continua, ele joga de novo (combo)
+    // se o robô ainda tem tiros e o jogo continua, ele joga de novo
     if (fase === 'batalha' && vez === 'robo') {
       setTimeout(jogadaRobo, 900);
     }
@@ -533,6 +551,17 @@
     }
     else if (fase === 'minas') {
       mostrarMensagem(`Agora posicione suas minas. Faltam: ${minasParaColocar} 💣 (clique na água)`);
+    }
+    else if (fase === 'batalha') {
+      const info = document.createElement('span');
+      info.style.marginRight = '12px';
+      info.style.fontWeight = 'bold';
+      if (vez === 'jogador') {
+        info.textContent = `🎯 Sua vez — tiros restantes: ${tirosRestantes}`;
+      } else {
+        info.textContent = '🤖 Vez do robô...';
+      }
+      div.appendChild(info);
     }
 
     // botão de reiniciar sempre disponível
