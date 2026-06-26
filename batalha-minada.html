@@ -155,7 +155,7 @@
   // ========================================================
   const TAMANHO = 8;
   const TAMANHOS_NAVIOS = [4, 3, 3, 2];   // navios de cada jogador
-  const QTD_MINAS = 4;                    // minas de cada jogador
+  const QTD_MINAS = 8;                    // minas de cada jogador
   const TOTAL_PARTES = TAMANHOS_NAVIOS.reduce((s, n) => s + n, 0); // = 12
 
   // ========================================================
@@ -250,8 +250,10 @@
     if (tab.revelada[linha][coluna]) return;
     if (tab.grade[linha][coluna] !== 'agua') return;
     tab.revelada[linha][coluna] = true;
-    const { minas } = contarVizinhos(tab, linha, coluna);
-    if (minas > 0) return; // tem mina por perto -> não abre os vizinhos
+    const { minas, navios } = contarVizinhos(tab, linha, coluna);
+    // só continua a cascata por água "totalmente calma": 0 minas E 0 navios por perto.
+    // assim os navios também barram a abertura, deixando os buracos bem menores.
+    if (minas > 0 || navios > 0) return;
     for (let dl = -1; dl <= 1; dl++) {
       for (let dc = -1; dc <= 1; dc++) {
         if (dl === 0 && dc === 0) continue;
