@@ -425,8 +425,9 @@
     const res = resolverAtaque('robo', alvo.l, alvo.c);
 
     if (res === 'mina') {
-      mostrarMensagem('💣 O robô pisou numa das SUAS minas! VITÓRIA! 🏆');
-      fase = 'fim';
+      // MODO TESTE: o robô tem vidas infinitas, então não morre na mina.
+      mostrarMensagem('🤖💣 O robô pisou numa mina sua! (vidas infinitas no modo teste) Sua vez!');
+      vez = 'jogador';
     } else if (res === 'navio') {
       if (partesJogador === 0) {
         mostrarMensagem('☠️ O robô afundou todos os seus navios. DERROTA.');
