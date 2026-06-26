@@ -171,6 +171,7 @@
   let indiceNavio;       // qual navio da lista estamos colocando
   let orientacao;        // 'horizontal' | 'vertical'
   let minasParaColocar;  // quantas minas faltam o jogador posicionar
+  let primeiroAtaque;    // { jogador, robo } -> garante 1º tiro sem morrer na mina
 
   // ========================================================
   //  FERRAMENTAS DE TABULEIRO
@@ -285,6 +286,9 @@
     minasParaColocar = QTD_MINAS;
     vez = 'jogador';
 
+    // controla o "primeiro tiro seguro" de cada lado (não perde por mina no 1º clique)
+    primeiroAtaque = { jogador: true, robo: true };
+
     atualizarContadores();
     desenharTudo();
   }
@@ -340,6 +344,14 @@
   // Devolve 'agua', 'navio' ou 'mina'.
   function resolverAtaque(quem, l, c) {
     const alvo = (quem === 'jogador') ? robo : jogador;
+
+    // PRIMEIRO TIRO SEGURO: se for a primeira jogada deste lado e cair numa
+    // mina, a gente realoca a mina pra outra casa de água (igual ao Campo Minado).
+    if (primeiroAtaque[quem] && alvo.grade[l][c] === 'mina') {
+      realocarMina(alvo, l, c);
+    }
+    primeiroAtaque[quem] = false;
+
     const conteudo = alvo.grade[l][c];
 
     if (conteudo === 'navio') {
@@ -353,6 +365,26 @@
     }
     abrirCascata(alvo, l, c); // água: abre em cascata
     return 'agua';
+  }
+
+  // Tira a mina da casa (fl, fc) e a esconde em outra casa de água ainda
+  // não revelada. Usado só pra garantir o primeiro tiro seguro.
+  function realocarMina(tab, fl, fc) {
+    tab.grade[fl][fc] = 'agua'; // a casa clicada deixa de ser mina
+
+    const vazias = [];
+    for (let l = 0; l < TAMANHO; l++) {
+      for (let c = 0; c < TAMANHO; c++) {
+        if (tab.grade[l][c] === 'agua' && !tab.revelada[l][c] && !(l === fl && c === fc)) {
+          vazias.push({ l, c });
+        }
+      }
+    }
+    if (vazias.length) {
+      const nova = vazias[Math.floor(Math.random() * vazias.length)];
+      tab.grade[nova.l][nova.c] = 'mina';
+    }
+    // (se não houver casa livre, a mina simplesmente some — caso raríssimo)
   }
 
   // ---- Ataque do JOGADOR (clique no tabuleiro do robô) ----
